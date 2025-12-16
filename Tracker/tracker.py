@@ -1,52 +1,53 @@
-# Instructions for your Secret Server (Python code)
-import os  # <-- ADDED THIS LINE to help find the file
-from flask import Flask, request, send_file
+import os
 import requests
+from flask import Flask, request, send_file
 from datetime import datetime
 
-# --- CONFIGURATION ---
-app = Flask(__name__)
+# --- Configuration ---
+tracker_app = Flask(__name__)
 
-# The reliable way to find the decoy image file:
-# 1. Get the directory where your script is running
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# 2. Join the directory path with the image file name. 
-#    This ensures the script finds 'my_error.png' wherever the script is run from.
-IMAGE_NAME = os.path.join(BASE_DIR, 'my_error.png')
+# Define file paths dynamically to ensure reliable asset location.
+PROJECT_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DECOY_IMAGE_PATH = os.path.join(PROJECT_BASE_DIR, 'my_error.png')
 
-LOG_FILE = 'scammer_log.txt' # The file that saves the addresses
-GEO_API_URL = 'http://ipinfo.io/' # The online service to check the IP address
+IP_LOG_FILENAME = 'scammer_log.txt'
+GEO_SERVICE_URL = 'http://ipinfo.io/'
 
-# -- THE MAIN SPYING TRICK --
-@app.route('/image') 
-def spy_on_click():
-    # 1. Capture the Address (IP)
-    user_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+# --- Tracking Route ---
+@tracker_app.route('/image') 
+def process_visitor_click():
     
-    # 2. Get Location Details from the online service
+    # Capture the real visitor IP address, accounting for proxy headers (like Ngrok).
+    visitor_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    
+    # Lookup location details via external GeoIP service.
     try:
-        location_response = requests.get(f"{GEO_API_URL}{user_ip}/json").json()
-    except:
-        location_response = {"city": "Unknown", "country": "Unknown"}
+        location_data = requests.get(f"{GEO_SERVICE_URL}{visitor_ip}/json").json()
+    except Exception:
+        location_data = {"city": "Unknown", "country": "Unknown"}
 
-    city = location_response.get('city', 'N/A')
-    country = location_response.get('country', 'N/A')
+    city_name = location_data.get('city', 'N/A')
+    country_code = location_data.get('country', 'N/A')
     
-    # 3. Write the secret log entry
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{timestamp}] IP: {user_ip} | Location: {city}, {country}\n"
+    # Create and write the log entry.
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    with open(LOG_FILE, 'a') as f:
-        f.write(log_entry)
+    log_record = (
+        f"[{current_time}] IP: {visitor_ip} | "
+        f"Location: {city_name}, {country_code}\n"
+    )
     
-    print(f"IP LOGGED: {user_ip} - {city}, {country}")
+    with open(IP_LOG_FILENAME, 'a') as log_file:
+        log_file.write(log_record)
     
-    # 4. Show the Decoy Image (fool the scammer)
-    # This now uses the full, reliable path to the image file
-    return send_file(IMAGE_NAME, mimetype='image/png')
+    # Provide immediate feedback to the local console.
+    print(f"--- IP SUCCESSFULLY LOGGED ---: {visitor_ip} - {city_name}, {country_code}")
+    
+    # Serve the decoy image to the visitor.
+    return send_file(DECOY_IMAGE_PATH, mimetype='image/png')
 
-# -- START THE SERVER --
+# --- Server Execution ---
 if __name__ == '__main__':
-    # The server is actually running on port 8000 based on your terminal output.
-    print(f"Running the server. Link to test locally: http://127.0.0.1:8000/image")
-    app.run(host='0.0.0.0', port=8000)
+    # Start the server on port 8000.
+    print(f"Starting server... Test locally at: http://127.0.0.1:8000/image")
+    tracker_app.run(host='0.0.0.0', port=8000)
